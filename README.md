@@ -201,7 +201,7 @@ scripts/coverage_report.py        # used by verify_coverage.yml
 tests/                            # unit tests for the enrollment worker
 ```
 
-## Setup 
+## Sandbox Setup 
 
 ```bash
 cd sandbox
@@ -233,7 +233,7 @@ python3 inventory/generate_inventory.py
 cd /opt/aws-disk-monitoring
 ```
 
-## Simulate
+## Sandbox Simulate
 
 Disk Fill-up
 ```bash
@@ -249,7 +249,7 @@ aws ec2 wait instance-stopped --instance-ids i-0024ac42850274dfb --region us-eas
 aws ec2 start-instances --instance-ids i-0024ac42850274dfb --region us-east-1
 ```
 
-## Destroy
+## Sandbox Destroy
 
 ```bash
 python3 sandbox.py destroy
