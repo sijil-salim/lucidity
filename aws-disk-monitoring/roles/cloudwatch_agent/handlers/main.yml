@@ -1,0 +1,12 @@
+---
+- name: Reload CloudWatch agent (linux)
+  ansible.builtin.command: >-
+    /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl
+    -a fetch-config -m ec2 -s -c file:{{ cw_agent_linux_config_path }}
+  changed_when: true
+
+- name: Reload CloudWatch agent (windows)
+  ansible.windows.win_shell: >-
+    & "C:\Program Files\Amazon\AmazonCloudWatchAgent\amazon-cloudwatch-agent-ctl.ps1"
+    -a fetch-config -m ec2 -s -c file:{{ cw_agent_windows_config_path }}
+  changed_when: true

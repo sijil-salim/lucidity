@@ -1,0 +1,14 @@
+---
+# Detection speed = the agent reports every 60 s, then the alarm needs `datapoints_to_alarm` bad minutes
+# out of `evaluation_periods`. warning: 3 of 5 min (~3 min, ignores a brief spike); critical: 2 of 2 min (~2 min).
+disk_thresholds:
+  - { level: warning, percent: 80, period: 60, evaluation_periods: 5, datapoints_to_alarm: 3 }
+  - { level: critical, percent: 90, period: 60, evaluation_periods: 2, datapoints_to_alarm: 2 }
+disk_fill_rate_alarm_enabled: true
+disk_fill_rate_hours: 12              # alarm if projected to fill within N hours...
+disk_fill_rate_period: 300            # ...measured on 5-minute peaks, and seen 3 times in a row (15 min)
+disk_alarm_prefix: DiskUsage          # IAM policy only allows alarm names with this prefix
+disk_ignore_fstypes: [tmpfs, devtmpfs, overlay, squashfs, ramfs, iso9660, fuse.lxcfs]
+disk_ignore_mount_regex: '^/(snap|run|sys|proc|dev|boot/efi|var/lib/(docker|kubelet|containers))'
+windows_drives: ["C:"]
+alerts_topic_arn: ""                  # set in group_vars: central SNS topic

@@ -1,0 +1,7 @@
+build/
+.sandbox-state.json
+__pycache__/
+NOTES.txt
+AWSCLIV2.pkg
+.DS_Store
+CLAUDE.md

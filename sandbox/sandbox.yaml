@@ -1,0 +1,16 @@
+# Desired state of the sandbox. Edit by hand, or use the commands:
+#   ./sandbox.py add-account / remove-account / add-vm / remove-vm
+# (the commands rewrite this file; comments are not preserved - see README.md)
+region: us-east-1
+alert_email: ''
+email_base: you@example.com
+accounts:
+- name: home
+  id: self
+  vms:
+  - name: web-1
+    os: al2023
+    env: dev
+  # - name: app-1
+  #   os: ubuntu
+  #   env: dev

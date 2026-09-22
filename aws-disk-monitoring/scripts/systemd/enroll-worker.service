@@ -1,0 +1,18 @@
+[Unit]
+Description=Event-driven VM enrollment (SQS -> ansible enroll.yml)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ec2-user
+WorkingDirectory=/opt/aws-disk-monitoring
+EnvironmentFile=/etc/disk-monitoring.env
+Environment=AWS_CONFIG_FILE=/opt/aws-disk-monitoring/inventory/aws_config
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStartPre=/usr/bin/python3 /opt/aws-disk-monitoring/inventory/generate_inventory.py
+ExecStart=/usr/bin/python3 /opt/aws-disk-monitoring/scripts/enroll_worker.py
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

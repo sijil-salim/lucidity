@@ -1,0 +1,5 @@
+---
+collections:
+  - name: amazon.aws        # aws_ec2 inventory, aws_ssm connection, cloudwatch_metric_alarm
+    version: ">=9.0.0"      # treat_missing_data support on cloudwatch_metric_alarm
+  - name: ansible.windows   # only needed if you manage Windows VMs

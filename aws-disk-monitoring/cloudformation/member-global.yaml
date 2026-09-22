@@ -1,0 +1,102 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Member account (deploy ONCE per account, via service-managed StackSet with
+  auto-deployment): the least-privilege role Ansible assumes + the SSM Default
+  Host Management role.
+Parameters:
+  ControllerRoleArn:
+    Type: String
+  OrgId:
+    Type: String
+    AllowedPattern: '^o-[a-z0-9]{10,32}$'
+  OpsRoleName:
+    Type: String
+    Default: AnsibleOpsRole
+Resources:
+  AnsibleOpsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref OpsRoleName
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Ref ControllerRoleArn
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                "aws:PrincipalOrgID": !Ref OrgId
+      Policies:
+        - PolicyName: ReadOnlyDiscovery
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                  - ec2:DescribeTags
+                  - ssm:DescribeInstanceInformation
+                  - ssm:GetConnectionStatus
+                  - cloudwatch:ListMetrics
+                  - cloudwatch:DescribeAlarms
+                Resource: "*"
+        - PolicyName: SessionManagerOnEnrolledInstances
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: StartSessionUnlessOptedOut
+                Effect: Allow
+                Action: ssm:StartSession
+                Resource: !Sub "arn:${AWS::Partition}:ec2:*:${AWS::AccountId}:instance/*"
+                Condition:
+                  StringNotEquals:
+                    "ssm:resourceTag/Monitoring": disabled
+              - Sid: SessionDocuments
+                Effect: Allow
+                Action: ssm:StartSession
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:ssm:*:${AWS::AccountId}:document/SSM-SessionManagerRunShell"
+                  - !Sub "arn:${AWS::Partition}:ssm:*::document/AWS-StartInteractiveCommand"
+              - Sid: OwnSessionsOnly
+                Effect: Allow
+                Action: [ssm:TerminateSession, ssm:ResumeSession]
+                Resource: !Sub "arn:${AWS::Partition}:ssm:*:*:session/${!aws:userid}-*"
+        - PolicyName: FileTransferBucket
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+                Resource: !Sub "arn:${AWS::Partition}:s3:::ansible-ssm-${AWS::AccountId}-*/*"
+              - Effect: Allow
+                Action: [s3:ListBucket, s3:GetBucketLocation]
+                Resource: !Sub "arn:${AWS::Partition}:s3:::ansible-ssm-${AWS::AccountId}-*"
+        - PolicyName: ManageOnlyDiskAlarms
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [cloudwatch:PutMetricAlarm, cloudwatch:DeleteAlarms]
+                Resource: !Sub "arn:${AWS::Partition}:cloudwatch:*:${AWS::AccountId}:alarm:DiskUsage-*"
+  # Lets SSM register instances that have no instance profile at all (DHMC).
+  # NOTE: DHMC only gives SSM access. Publishing metrics still needs
+  # CloudWatchAgentServerPolicy on the instance's own role.
+  DhmcRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AWSSystemsManagerDefaultEC2InstanceManagementRole
+      Path: /service-role/
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ssm.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedEC2InstanceDefaultPolicy"
+Outputs:
+  OpsRoleArn:
+    Value: !GetAtt AnsibleOpsRole.Arn

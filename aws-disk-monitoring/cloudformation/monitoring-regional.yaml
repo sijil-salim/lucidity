@@ -1,0 +1,90 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Monitoring/ops account, per REGION: OAM sink (member accounts link to it), the
+  central SNS alert topic, and the fleet-wide disk dashboard.
+Parameters:
+  OrgId:
+    Type: String
+    AllowedPattern: '^o-[a-z0-9]{10,32}$'
+  AlertEmail:
+    Type: String
+    Default: ""
+    Description: Optional. Email subscribed to the alert topic (use SNS->Slack/PagerDuty in real life).
+Conditions:
+  HasEmail: !Not [!Equals [!Ref AlertEmail, ""]]
+Resources:
+  Sink:
+    Type: AWS::Oam::Sink
+    Properties:
+      Name: org-disk-monitoring
+      Policy:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: [oam:CreateLink, oam:UpdateLink]
+            Resource: "*"
+            Condition:
+              StringEquals:
+                "aws:PrincipalOrgID": !Ref OrgId
+              ForAllValues:StringEquals:
+                "oam:ResourceTypes": [AWS::CloudWatch::Metric]
+  AlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: disk-alerts
+  AlertsTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics: [!Ref AlertsTopic]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          # Member-account alarms publish here. Scoped to our alarm-name prefix.
+          # Tighten further with aws:SourceOrgID if your services support it.
+          - Sid: AllowMemberAccountAlarms
+            Effect: Allow
+            Principal:
+              Service: cloudwatch.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref AlertsTopic
+            Condition:
+              ArnLike:
+                "aws:SourceArn": !Sub "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:*:alarm:DiskUsage-*"
+  EmailSub:
+    Type: AWS::SNS::Subscription
+    Condition: HasEmail
+    Properties:
+      TopicArn: !Ref AlertsTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+  Dashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: fleet-disk-utilization
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric", "x": 0, "y": 0, "width": 24, "height": 8,
+              "properties": {
+                "title": "Top 10 fullest disks (all linked accounts) - % used",
+                "region": "${AWS::Region}", "view": "timeSeries", "stat": "Maximum", "period": 300,
+                "metrics": [[ { "expression": "SELECT MAX(disk_used_percent) FROM SCHEMA(CWAgent, InstanceId, path, fstype) GROUP BY InstanceId, path ORDER BY MAX() DESC LIMIT 10", "label": "", "id": "q1" } ]],
+                "yAxis": { "left": { "min": 0, "max": 100 } },
+                "annotations": { "horizontal": [
+                  { "label": "warning", "value": 80 },
+                  { "label": "critical", "value": 90 } ] }
+              }
+            },
+            {
+              "type": "text", "x": 0, "y": 8, "width": 24, "height": 3,
+              "properties": { "markdown": "Alarms are named `DiskUsage-<level>-<instance>-<mount>`. Filter the Alarms page by `DiskUsage-` to see fleet state. Use the console account selector to switch between linked source accounts." }
+            }
+          ]
+        }
+Outputs:
+  SinkArn:
+    Value: !Ref Sink
+  AlertsTopicArn:
+    Value: !Ref AlertsTopic

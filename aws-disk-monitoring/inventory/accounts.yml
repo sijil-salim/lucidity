@@ -1,0 +1,17 @@
+---
+# Source of truth for "which accounts/regions does Ansible manage".
+# Either list accounts here, or run generate_inventory.py --from-org to pull
+# every ACTIVE account from AWS Organizations automatically.
+ops_role_name: AnsibleOpsRole          # role deployed by the StackSet in every account
+credential_source: Ec2InstanceMetadata # Ec2InstanceMetadata | EcsContainer | Environment
+default_regions:
+  - us-east-1
+  - ap-south-1
+exclude_account_ids:                   # e.g. the security/log-archive accounts
+  - "000000000000"
+accounts:
+  - id: "111111111111"
+    name: prod-payments
+  - id: "222222222222"
+    name: prod-platform
+    regions: [ap-south-1]              # optional per-account override

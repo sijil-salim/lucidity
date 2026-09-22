@@ -1,0 +1,45 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Ops account - identity of the Ansible controller (EC2/AWX runner). It has NO
+  permissions of its own except to assume AnsibleOpsRole in member accounts.
+Parameters:
+  OpsRoleName:
+    Type: String
+    Default: AnsibleOpsRole
+Resources:
+  ControllerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AnsibleControllerRole
+      ManagedPolicyArns:            # lets you reach the controller itself via Session Manager (no SSH)
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ec2.amazonaws.com, ecs-tasks.amazonaws.com]
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AssumeOpsRoleInMemberAccounts
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: sts:AssumeRole
+                Resource: !Sub "arn:${AWS::Partition}:iam::*:role/${OpsRoleName}"
+        - PolicyName: ListOrgAccounts
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [organizations:ListAccounts, organizations:DescribeOrganization]
+                Resource: "*"
+  ControllerInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: AnsibleControllerProfile
+      Roles: [!Ref ControllerRole]
+Outputs:
+  ControllerRoleArn:
+    Value: !GetAtt ControllerRole.Arn

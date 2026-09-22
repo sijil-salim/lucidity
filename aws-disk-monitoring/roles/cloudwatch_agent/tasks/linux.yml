@@ -1,0 +1,62 @@
+---
+- name: Gather package facts (idempotent install check)
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Work out which AWS-hosted package to use
+  ansible.builtin.set_fact:
+    _cw_arch: "{{ 'arm64' if ansible_facts.architecture in ['aarch64', 'arm64'] else 'amd64' }}"
+    _cw_path: "{{ 'ubuntu' if ansible_facts.distribution == 'Ubuntu' else ('debian' if ansible_facts.os_family == 'Debian' else 'redhat') }}"
+    _cw_ext: "{{ 'deb' if ansible_facts.os_family == 'Debian' else 'rpm' }}"
+
+- name: Install CloudWatch agent from the distro repo (Amazon Linux)
+  ansible.builtin.package:
+    name: amazon-cloudwatch-agent
+    state: present
+  when:
+    - "'amazon-cloudwatch-agent' not in ansible_facts.packages"
+    - ansible_facts.distribution == 'Amazon'
+
+- name: Install CloudWatch agent from the AWS regional package bucket (other distros)
+  when:
+    - "'amazon-cloudwatch-agent' not in ansible_facts.packages"
+    - ansible_facts.distribution != 'Amazon'
+  vars:
+    _url: "https://amazoncloudwatch-agent-{{ ansible_aws_ssm_region }}.s3.{{ ansible_aws_ssm_region }}.amazonaws.com/{{ _cw_path }}/{{ _cw_arch }}/latest/amazon-cloudwatch-agent.{{ _cw_ext }}"
+  block:
+    - name: Download package
+      ansible.builtin.get_url:
+        url: "{{ _url }}"
+        dest: "/tmp/amazon-cloudwatch-agent.{{ _cw_ext }}"
+        mode: "0644"
+
+    # TODO(hardening): verify the detached .sig from the same bucket before installing.
+    - name: Install .deb
+      ansible.builtin.apt:
+        deb: /tmp/amazon-cloudwatch-agent.deb
+      when: _cw_ext == 'deb'
+
+    - name: Install .rpm
+      ansible.builtin.dnf:
+        name: /tmp/amazon-cloudwatch-agent.rpm
+        state: present
+        disable_gpg_check: true
+      when: _cw_ext == 'rpm'
+
+- name: Render disk-monitoring agent config
+  ansible.builtin.template:
+    src: linux-agent.json.j2
+    dest: "{{ cw_agent_linux_config_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload CloudWatch agent (linux)
+
+- name: Apply config now (do not wait until end of play)
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure agent is enabled and running
+  ansible.builtin.systemd:
+    name: amazon-cloudwatch-agent
+    enabled: true
+    state: started

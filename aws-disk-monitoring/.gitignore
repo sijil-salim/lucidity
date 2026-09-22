@@ -1,0 +1,4 @@
+inventory/generated/
+collections/ansible_collections/
+*.retry
+__pycache__/

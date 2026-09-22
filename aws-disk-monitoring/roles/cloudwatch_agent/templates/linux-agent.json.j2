@@ -1,0 +1,16 @@
+{
+  "agent": { "metrics_collection_interval": {{ cw_agent_collection_interval }}, "run_as_user": "root" },
+  "metrics": {
+    "namespace": "CWAgent",
+    "append_dimensions": { "InstanceId": "${aws:InstanceId}" },
+    "metrics_collected": {
+      "disk": {
+        "measurement": ["used_percent", "inodes_free"],
+        "resources": ["*"],
+        "drop_device": true,
+        "ignore_file_system_types": {{ cw_agent_ignore_fstypes | to_json }},
+        "metrics_collection_interval": {{ cw_agent_collection_interval }}
+      }
+    }
+  }
+}

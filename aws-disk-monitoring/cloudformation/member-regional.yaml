@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Member account, per REGION (StackSet, auto-deploy): SSM file-transfer bucket,
+  Default Host Management enablement, and the CloudWatch Observability Access
+  Manager link that shares this account's metrics with the central monitoring account.
+Parameters:
+  MonitoringSinkArn:
+    Type: String
+    Default: ""
+    Description: >-
+      OAM sink ARN in the monitoring account for THIS region (per-region override).
+      Leave empty to skip the link (e.g. single-account sandbox).
+  EventBusArn:
+    Type: String
+    Default: ""
+    Description: >-
+      Central event bus in the ops account for THIS region (per-region override). When set, "instance is
+      running" events are forwarded there so the new VM is enrolled within minutes. Leave empty to skip.
+Conditions:
+  LinkToSink: !Not [!Equals [!Ref MonitoringSinkArn, ""]]
+  ForwardEvents: !Not [!Equals [!Ref EventBusArn, ""]]
+Resources:
+  TransferBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "ansible-ssm-${AWS::AccountId}-${AWS::Region}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireTransfers
+            Status: Enabled
+            ExpirationInDays: 1
+  TransferBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref TransferBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt TransferBucket.Arn
+              - !Sub "${TransferBucket.Arn}/*"
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
+  # Requires member-global.yaml (DhmcRole) to have been deployed first.
+  DhmcSetting:
+    Type: AWS::SSM::ServiceSetting
+    Properties:
+      SettingId: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:servicesetting/ssm/managed-instance/default-ec2-instance-management-role"
+      SettingValue: service-role/AWSSystemsManagerDefaultEC2InstanceManagementRole
+  MetricsLink:
+    Type: AWS::Oam::Link
+    Condition: LinkToSink
+    Properties:
+      LabelTemplate: "$AccountName"
+      ResourceTypes: [AWS::CloudWatch::Metric]
+      SinkIdentifier: !Ref MonitoringSinkArn
+  # EventBridge needs an IAM role to put events on a bus in another account.
+  EnrollmentForwardRole:
+    Type: AWS::IAM::Role
+    Condition: ForwardEvents
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: PutEventsToCentralBus
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: events:PutEvents
+                Resource: !Ref EventBusArn
+  EnrollmentRule:
+    Type: AWS::Events::Rule
+    Condition: ForwardEvents
+    Properties:
+      Description: Forward "EC2 instance running" to the central enrollment bus
+      State: ENABLED
+      EventPattern:
+        source: [aws.ec2]
+        detail-type: [EC2 Instance State-change Notification]
+        detail:
+          state: [running]
+      Targets:
+        - Id: central-enrollment-bus
+          Arn: !Ref EventBusArn
+          RoleArn: !GetAtt EnrollmentForwardRole.Arn

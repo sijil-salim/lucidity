@@ -1,0 +1,15 @@
+name: lint
+on: [push, pull_request]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements.txt ansible ansible-lint yamllint cfn-lint
+      - run: python inventory/generate_inventory.py --accounts inventory/accounts.yml --out /tmp/inv
+      - run: python -m unittest discover -s tests
+      - run: cfn-lint cloudformation/*.yaml
+      - run: ansible-playbook -i /tmp/inv --syntax-check playbooks/enroll.yml
+      - run: ansible-lint playbooks roles

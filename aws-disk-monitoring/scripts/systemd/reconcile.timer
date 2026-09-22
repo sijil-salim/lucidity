@@ -1,0 +1,10 @@
+[Unit]
+Description=Hourly safety-net run
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

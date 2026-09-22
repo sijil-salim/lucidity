@@ -1,0 +1,16 @@
+---
+# Enroll every discovered VM: install + configure the CloudWatch agent and
+# create per-disk alarms. Safe to re-run any time (idempotent) - schedule it
+# from AWX / cron to converge drift and pick up new VMs and new disks.
+#
+#   ansible-playbook playbooks/enroll.yml                    # everything
+#   ansible-playbook playbooks/enroll.yml -l account_prod_payments
+#   ansible-playbook playbooks/enroll.yml -l env_prod -e enroll_batch_size=10
+- name: Enroll VMs for disk monitoring
+  hosts: all
+  gather_facts: true
+  serial: "{{ enroll_batch_size | default('25%') }}"   # blast-radius control
+  max_fail_percentage: 10
+  roles:
+    - cloudwatch_agent
+    - disk_alarms

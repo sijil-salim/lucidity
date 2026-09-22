@@ -1,0 +1,14 @@
+---
+- name: Install CloudWatch agent (MSI)
+  ansible.windows.win_package:
+    path: https://amazoncloudwatch-agent.s3.amazonaws.com/windows/amd64/latest/amazon-cloudwatch-agent.msi
+    state: present
+
+- name: Render disk-monitoring agent config
+  ansible.windows.win_template:
+    src: windows-agent.json.j2
+    dest: "{{ cw_agent_windows_config_path }}"
+  notify: Reload CloudWatch agent (windows)
+
+- name: Apply config now
+  ansible.builtin.meta: flush_handlers

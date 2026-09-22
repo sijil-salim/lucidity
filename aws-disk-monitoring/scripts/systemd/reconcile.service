@@ -1,0 +1,11 @@
+[Unit]
+Description=Safety-net: rediscover VMs, re-run enrollment, report unmonitored VMs
+
+[Service]
+Type=oneshot
+User=ec2-user
+WorkingDirectory=/opt/aws-disk-monitoring
+EnvironmentFile=/etc/disk-monitoring.env
+Environment=AWS_CONFIG_FILE=/opt/aws-disk-monitoring/inventory/aws_config
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/opt/aws-disk-monitoring/scripts/reconcile.sh

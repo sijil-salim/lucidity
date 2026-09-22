@@ -1,0 +1,12 @@
+---
+# ---- site-specific values: edit these ----
+ops_account_id: "999999999999"       # account that owns the central SNS topic / monitoring sink
+alerts_topic_name: disk-alerts
+# Central topic in the *same region as the VM* (CloudWatch alarms can only notify same-region SNS).
+alerts_topic_arn: "arn:aws:sns:{{ ansible_aws_ssm_region }}:{{ ops_account_id }}:{{ alerts_topic_name }}"
+
+# ---- tunables (defaults live in the roles) ----
+# Alarm speed/thresholds are tunable (defaults in roles/disk_alarms/defaults/main.yml):
+# disk_thresholds:
+#   - { level: warning, percent: 80, period: 60, evaluation_periods: 5, datapoints_to_alarm: 3 }
+#   - { level: critical, percent: 90, period: 60, evaluation_periods: 2, datapoints_to_alarm: 2 }

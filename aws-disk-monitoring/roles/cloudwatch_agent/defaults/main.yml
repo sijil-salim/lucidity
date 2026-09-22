@@ -1,0 +1,6 @@
+---
+cw_agent_collection_interval: 60
+cw_agent_linux_config_path: /opt/aws/amazon-cloudwatch-agent/etc/disk-monitoring.json
+cw_agent_windows_config_path: 'C:\ProgramData\Amazon\AmazonCloudWatchAgent\disk-monitoring.json'
+# Pseudo/ephemeral filesystems: never worth an alarm (also keeps custom-metric cost down)
+cw_agent_ignore_fstypes: [tmpfs, devtmpfs, overlay, squashfs, ramfs, iso9660, fuse.lxcfs]

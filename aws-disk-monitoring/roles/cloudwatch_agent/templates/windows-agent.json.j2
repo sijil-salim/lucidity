@@ -1,0 +1,14 @@
+{
+  "agent": { "metrics_collection_interval": {{ cw_agent_collection_interval }} },
+  "metrics": {
+    "namespace": "CWAgent",
+    "append_dimensions": { "InstanceId": "${aws:InstanceId}" },
+    "metrics_collected": {
+      "LogicalDisk": {
+        "measurement": ["% Free Space"],
+        "resources": ["*"],
+        "metrics_collection_interval": {{ cw_agent_collection_interval }}
+      }
+    }
+  }
+}

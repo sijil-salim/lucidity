@@ -1,0 +1,10 @@
+---
+# Alarms are created in the *VM's own account/region* through the same assumed
+# role (profile) that Ansible used to reach the VM, so nothing is hard-coded.
+- name: Linux alarms
+  ansible.builtin.include_tasks: linux.yml
+  when: ansible_facts.os_family != 'Windows'
+
+- name: Windows alarms
+  ansible.builtin.include_tasks: windows.yml
+  when: ansible_facts.os_family == 'Windows'

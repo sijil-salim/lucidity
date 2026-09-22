@@ -1,0 +1,26 @@
+---
+# Answers "which VMs are NOT being monitored right now?" and fails if any.
+# Catches silent failures: agent stopped, VM not reachable by SSM, new VM not yet enrolled.
+- name: Verify monitoring coverage across all accounts
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    fail_on_gap: true
+  tasks:
+    - name: Run coverage report
+      ansible.builtin.command: >-
+        {{ ansible_playbook_python }} {{ playbook_dir }}/../scripts/coverage_report.py
+        --accounts {{ playbook_dir }}/../inventory/accounts.yml
+      register: coverage
+      changed_when: false
+      failed_when: false
+
+    - name: Show report
+      ansible.builtin.debug:
+        msg: "{{ coverage.stdout_lines }}"
+
+    - name: Fail if any VM is unmonitored
+      ansible.builtin.fail:
+        msg: "Monitoring gaps found (see report above)."
+      when: fail_on_gap | bool and coverage.rc != 0

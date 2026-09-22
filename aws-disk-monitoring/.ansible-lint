@@ -1,0 +1,2 @@
+skip_list:
+  - var-naming[no-role-prefix]   # shared vars (disk_thresholds, alerts_topic_arn) intentionally un-prefixed

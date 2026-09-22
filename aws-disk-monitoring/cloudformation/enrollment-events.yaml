@@ -1,0 +1,120 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Ops account, per REGION - event-driven enrollment plumbing. Member accounts forward
+  "EC2 instance is now running" events to the bus; the rule puts them on a queue; a worker on the
+  Ansible controller reads the queue and enrolls that VM within minutes of it starting.
+  Deploy AFTER controller.yaml (needs the role) and monitoring-regional.yaml (alert topic).
+Parameters:
+  OrgId:
+    Type: String
+    AllowedPattern: '^o-[a-z0-9]{10,32}$'
+  ControllerRoleName:
+    Type: String
+    Default: AnsibleControllerRole
+  AlertsTopicArn:
+    Type: String
+    Default: ""
+    Description: Optional SNS topic notified when an enrollment could not be completed (dead-letter queue not empty).
+Conditions:
+  HasAlertsTopic: !Not [!Equals [!Ref AlertsTopicArn, ""]]
+Resources:
+  Bus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: disk-monitoring-events
+  BusPolicy:
+    Type: AWS::Events::EventBusPolicy
+    Properties:
+      EventBusName: !Ref Bus
+      StatementId: AllowOrgAccountsPutEvents
+      Statement:
+        Effect: Allow
+        Principal: "*"
+        Action: events:PutEvents
+        Resource: !GetAtt Bus.Arn
+        Condition:
+          StringEquals:
+            "aws:PrincipalOrgID": !Ref OrgId
+  Dlq:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: disk-monitoring-enrollment-dlq
+      MessageRetentionPeriod: 1209600
+  Queue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: disk-monitoring-enrollment
+      VisibilityTimeout: 900          # one Ansible run; a crashed worker's messages reappear after this
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt Dlq.Arn
+        maxReceiveCount: 10           # ~10 attempts (VM not yet in SSM etc.), then -> DLQ + alert
+  Rule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: A VM entered the running state -> enroll it
+      EventBusName: !Ref Bus
+      State: ENABLED
+      EventPattern:
+        source: [aws.ec2]
+        detail-type: [EC2 Instance State-change Notification]
+        detail:
+          state: [running]
+      Targets:
+        - Id: enrollment-queue
+          Arn: !GetAtt Queue.Arn
+  QueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref Queue]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt Queue.Arn
+            Condition:
+              ArnEquals:
+                "aws:SourceArn": !GetAtt Rule.Arn
+  # The controller's role may read the queue - nothing else changes about that role.
+  ConsumerPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Roles: [!Ref ControllerRoleName]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+              - sqs:ChangeMessageVisibility
+              - sqs:GetQueueAttributes
+            Resource: !GetAtt Queue.Arn
+  DlqNotEmptyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasAlertsTopic
+    Properties:
+      AlarmDescription: A VM could not be enrolled after repeated attempts - it is UNMONITORED. Inspect the dead-letter queue.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt Dlq.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertsTopicArn]
+Outputs:
+  EventBusArn:
+    Value: !GetAtt Bus.Arn
+  QueueUrl:
+    Value: !Ref Queue
+  QueueArn:
+    Value: !GetAtt Queue.Arn

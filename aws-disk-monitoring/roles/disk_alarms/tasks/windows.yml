@@ -1,0 +1,30 @@
+---
+- name: "Threshold alarms: LogicalDisk % Free Space (warning / critical)"
+  amazon.aws.cloudwatch_metric_alarm:
+    state: present
+    region: "{{ ansible_aws_ssm_region }}"
+    profile: "{{ ansible_aws_ssm_profile }}"
+    name: "{{ disk_alarm_prefix }}-{{ item.1.level }}-{{ inventory_hostname }}-{{ item.0 | regex_replace('[^A-Za-z0-9]', '_') }}"
+    description: "{{ item.1.level | upper }}: drive {{ item.0 }} on {{ inventory_hostname }} ({{ aws_account_name }}) >= {{ item.1.percent }}% used"
+    namespace: CWAgent
+    metric_name: "LogicalDisk % Free Space"
+    statistic: Minimum
+    comparison: LessThanOrEqualToThreshold
+    threshold: "{{ 100 - item.1.percent }}"
+    period: "{{ item.1.period | default(60) }}"
+    evaluation_periods: "{{ item.1.evaluation_periods | default(2) }}"
+    datapoints_to_alarm: "{{ item.1.datapoints_to_alarm | default(item.1.evaluation_periods | default(2)) }}"
+    treat_missing_data: missing
+    dimensions:
+      InstanceId: "{{ inventory_hostname }}"
+      instance: "{{ item.0 }}"
+      objectname: LogicalDisk
+    alarm_actions: "{{ [alerts_topic_arn] if alerts_topic_arn else [] }}"
+    ok_actions: "{{ [alerts_topic_arn] if alerts_topic_arn else [] }}"
+  delegate_to: localhost
+  become: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  loop: "{{ windows_drives | product(disk_thresholds) | list }}"
+  loop_control:
+    label: "{{ item.0 }} / {{ item.1.level }}"

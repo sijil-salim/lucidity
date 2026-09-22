@@ -1,0 +1,35 @@
+---
+# DEMO ONLY: fill / and release space so you can watch the alarms fire.
+#   ansible-playbook playbooks/simulate_fill.yml -l i-0abc123 -e confirm=yes -e fill_percent=85
+#   ansible-playbook playbooks/simulate_fill.yml -l i-0abc123 -e confirm=yes -e cleanup=true
+- name: Simulate a filling disk
+  hosts: all
+  gather_facts: true
+  vars:
+    fill_percent: 85
+    cleanup: false
+    fill_file: /var/tmp/disk-fill.img
+  tasks:
+    - name: Refuse to run without explicit confirmation
+      ansible.builtin.assert:
+        that: confirm | default('no') == 'yes'
+        fail_msg: "Pass -e confirm=yes and limit to ONE test host with -l"
+
+    - name: Remove filler file
+      ansible.builtin.file:
+        path: "{{ fill_file }}"
+        state: absent
+      when: cleanup | bool
+
+    - name: Compute bytes needed to reach target usage on /
+      when: not (cleanup | bool)
+      vars:
+        root: "{{ ansible_facts.mounts | selectattr('mount', 'equalto', '/') | first }}"
+        target_used: "{{ (root.size_total * (fill_percent | int) / 100) | int }}"
+        current_used: "{{ root.size_total - root.size_available }}"
+      block:
+        - name: Allocate filler file
+          ansible.builtin.command: "fallocate -l {{ (target_used | int) - (current_used | int) }} {{ fill_file }}"
+          args:
+            creates: "{{ fill_file }}"
+          when: (target_used | int) > (current_used | int)
