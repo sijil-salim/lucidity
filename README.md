@@ -19,8 +19,7 @@ anything the event path might miss.
 
 A high-level architecture diagram is provided in [docs/architecture.md](docs/architecture.md), and a
 plain-language walkthrough of the same flow is in [docs/architecture-simple.md](docs/architecture-simple.md).
-A full glossary of every component, IAM role, and AWS resource this solution creates, along with
-interview-style Q&A, is in [docs/components.md](docs/components.md).
+A full glossary of every component, IAM role, and AWS resource this solution creates is in [docs/components.md](docs/components.md).
 
 ---
 
