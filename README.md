@@ -17,11 +17,25 @@ controller is temporarily unavailable. Setup runs automatically the moment a new
 event pipeline rather than a fixed schedule, with a periodic reconciliation pass as a safety net for
 anything the event path might miss.
 
-A high-level architecture diagram is provided in [docs/architecture.md](docs/architecture.md), and a
-plain-language walkthrough of the same flow is in [docs/architecture-simple.md](docs/architecture-simple.md).
+---
+
+## High Level Architecture
+
+![HLD](docs/HLD.png)
+
+A plain-language walkthrough of the same flow is in [docs/architecture-simple.md](docs/architecture-simple.md).
 A full glossary of every component, IAM role, and AWS resource this solution creates is in [docs/components.md](docs/components.md).
 
----
+### Flow
+0. **Trigger** - a VM entering `running` fires an EventBridge event -> central bus -> SQS -> worker -> `enroll.yml -l <that VM>`
+   (an hourly safety-net run catches anything missed). Steps 1-4 below are what that run does.
+1. **Access** - controller assumes `AnsibleOpsRole` in each account (trust locked to controller role + org ID).
+2. **Discovery** - `aws_ec2` inventory per account/region; opt-out via tag `Monitoring=disabled`.
+3. **Enrollment** - Ansible connects over SSM (no SSH), installs/configures the CloudWatch agent.
+4. **Collection** - each VM *pushes* disk metrics to CloudWatch in its own account.
+5. **Alerting** - Ansible creates per-disk alarms (80/90 % + predictive fill-rate) -> central SNS topic.
+6. **Aggregation** - OAM links every account's metrics into one dashboard in the ops account.
+7. **Assurance** - `verify_coverage.yml` lists VMs that are unreachable or not reporting.
 
 ## 1. Ease of Access & Management
 
